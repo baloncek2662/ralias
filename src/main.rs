@@ -2,16 +2,15 @@ use std::process;
 
 use clap::Parser;
 use home::home_dir;
-use log::{debug, error};
+use log::error;
 use rashrc::Args;
 
-const BASHRC_FILENAME: &str = ".bashrc";
+const BASHRC_FILENAME: &str = ".bashrc.test";
 
 fn main() {
     simple_logger::init_with_level(log::Level::Debug).unwrap();
 
     let args = Args::parse();
-    debug!("Arguments: name={}, command={}", args.name, args.command);
 
     let mut bashrc_path = match home_dir() {
         Some(path) => path,
