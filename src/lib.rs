@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::f32::consts::E;
 use std::{fs::OpenOptions, io::Write, path::PathBuf};
 
 use clap::{Parser, Subcommand};
@@ -56,41 +57,52 @@ pub fn run(bashrc_path: PathBuf, args: Args) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn show_alias(bashrc_path: PathBuf, name: Option<String>) -> Result<(), Box<dyn Error>> {
+fn show_alias(path: PathBuf, name: Option<String>) -> Result<(), Box<dyn Error>> {
+    let contents = std::fs::read_to_string(path).unwrap();
+    let aliases = search("alias", &contents);
     match name {
         Some(name) => {
-            debug!("Show alias: {}", name);
-            // Implement logic to show a specific alias
+            debug!("Show alias: {name}");
+            if let Some(alias) = aliases.iter().find(|a| a.contains(&name)) {
+                println!("{}", alias);
+            } else {
+                println!("Alias not found");
+                Err("Alias not found")?;
+            }
         }
         None => {
             debug!("Show all aliases");
-            // Implement logic to show all aliases
+            for alias in aliases {
+                println!("{}", alias);
+            }
         }
     }
     Ok(())
 }
 
-fn add_alias(bashrc_path: PathBuf, name: String, command: String) -> Result<(), Box<dyn Error>> {
-    let new_alias = format!("alias {}='{}'\n", name, command);
+fn add_alias(path: PathBuf, name: String, command: String) -> Result<(), Box<dyn Error>> {
+    debug!("Add alias: {name}, command={command}");
+
+    let new_alias = format!("alias {name}='{command}'");
 
     let mut file = OpenOptions::new()
         .append(true)
-        .open(&bashrc_path)?;
+        .open(&path)?;
 
     writeln!(file, "{}", new_alias)?;
 
-    debug!("New alias added: {}", new_alias);
+    debug!("New alias added: {new_alias}");
 
     Ok(())
 }
 
-fn remove_alias(bashrc_path: PathBuf, name: String) -> Result<(), Box<dyn Error>> {
+fn remove_alias(path: PathBuf, name: String) -> Result<(), Box<dyn Error>> {
     // Implement logic to remove an alias
     debug!("Remove alias: {}", name);
     Ok(())
 }
 
-fn edit_alias(bashrc_path: PathBuf, name: String, command: String) -> Result<(), Box<dyn Error>> {
+fn edit_alias(path: PathBuf, name: String, command: String) -> Result<(), Box<dyn Error>> {
     // Implement logic to edit an alias
     debug!("Edit alias: {} with new command: {}", name, command);
     Ok(())
@@ -112,6 +124,8 @@ pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
 #[cfg(test)]
 // This defines a test module named tests.
 mod tests {
+    use tempfile::NamedTempFile;
+
     // This imports everything (*) from the parent module
     use super::*;
 
@@ -172,5 +186,34 @@ safe, fast, productive.
 Pick three.";
 
         assert_eq!(Vec::<&str>::new(), search(query, contents));
+    }
+
+    #[test]
+    fn test_add_alias() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let tmp_path = temp_file.path().to_path_buf();
+        let name = "g";
+        let command = "git";
+        let expected = "alias g='git'\n";
+
+        add_alias(tmp_path.clone(), name.to_string(), command.to_string()).unwrap();
+
+        let contents = std::fs::read_to_string(tmp_path).unwrap();
+        assert_eq!(expected, contents);
+    }
+
+    fn helper_create_temp_bashrc() -> NamedTempFile {
+        let temp_file = NamedTempFile::new().unwrap();
+        let tmp_path = temp_file.path().to_path_buf();
+        let contents = "alias g='git'\n";
+        std::fs::write(tmp_path.clone(), contents).unwrap();
+        temp_file
+    }
+
+    #[test]
+    fn test_show_alias() {
+        let temp_file = helper_create_temp_bashrc();
+        assert!(show_alias(temp_file.path().to_path_buf(), None).is_ok());
+        assert!(show_alias(temp_file.path().to_path_buf(), Some(String::from("g"))).is_ok());
     }
 }
