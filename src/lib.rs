@@ -40,9 +40,12 @@ pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
 mod tests {
     // This imports everything (*) from the parent module
     use super::*;
+    use std::fs::File;
+    use std::io::Write;
+    use tempfile::tempdir;
 
     #[test]
-    fn one_result() {
+    fn test_search() {
         let query = "duct";
         let contents = "\
 Rust:
@@ -50,5 +53,78 @@ safe, fast, productive.
 Pick three.";
 
         assert_eq!(vec!["safe, fast, productive."], search(query, contents));
+    }
+
+    #[test]
+    fn test_search_case_sensitive() {
+        let query = "Rust";
+        let contents = "\
+Rust:
+safe, fast, productive.
+Trust me.";
+
+        assert_eq!(vec!["Rust:"], search(query, contents));
+    }
+
+    #[test]
+    fn test_search_case_insensitive() {
+        let query = "rUsT";
+        let contents = "\
+Rust:
+safe, fast, productive.
+Trust me.";
+
+        assert_eq!(Vec::<&str>::new(), search(query, contents));
+    }
+
+    #[test]
+    fn test_search_multiple_results() {
+        let query = "fast";
+        let contents = "\
+Rust:
+safe, fast, productive.
+C++:
+fast, efficient, powerful.";
+
+        assert_eq!(vec!["safe, fast, productive.", "fast, efficient, powerful."], search(query, contents));
+    }
+
+    #[test]
+    fn test_search_no_results() {
+        let query = "slow";
+        let contents = "\
+Rust:
+safe, fast, productive.
+Pick three.";
+
+        assert_eq!(Vec::<&str>::new(), search(query, contents));
+    }
+
+    #[test]
+    fn test_run() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join(".bashrc");
+        let mut file = File::create(&file_path).unwrap();
+        writeln!(file, "alias ll='ls -la'").unwrap();
+
+        let args = Args {
+            name: "ll".to_string(),
+            command: "ls -la".to_string(),
+        };
+
+        let result = run(file_path, args);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_file_not_found() {
+        let file_path = PathBuf::from("non_existent_file");
+        let args = Args {
+            name: "ll".to_string(),
+            command: "ls -la".to_string(),
+        };
+
+        let result = run(file_path, args);
+        assert!(result.is_err());
     }
 }
