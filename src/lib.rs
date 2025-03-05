@@ -1,9 +1,14 @@
 use std::error::Error;
 use std::f32::consts::E;
+use std::io::BufReader;
+use std::io::prelude::*;
+
 use std::{fs::OpenOptions, io::Write, path::PathBuf};
 
 use clap::{Parser, Subcommand};
 use log::debug;
+
+const ALIAS_PREFIX: &str = "alias";
 
 #[derive(Parser)]
 pub struct Args {
@@ -62,7 +67,7 @@ pub fn run(bashrc_path: PathBuf, args: Args) -> Result<(), Box<dyn Error>> {
 
 fn show_alias(path: PathBuf, name: Option<String>) -> Result<(), Box<dyn Error>> {
     let contents = std::fs::read_to_string(path).unwrap();
-    let aliases = search("alias", &contents);
+    let aliases = search(ALIAS_PREFIX, &contents);
     match name {
         Some(name) => {
             debug!("Show alias: {name}");
@@ -70,7 +75,7 @@ fn show_alias(path: PathBuf, name: Option<String>) -> Result<(), Box<dyn Error>>
                 println!("{}", alias);
             } else {
                 println!("Alias not found");
-                Err("Alias not found")?;
+                Err("Alias not found")?
             }
         }
         None => {
@@ -101,6 +106,28 @@ fn remove_alias(path: PathBuf, name: String) -> Result<(), Box<dyn Error>> {
     debug!("Remove alias: {}", name);
 
     let mut file = OpenOptions::new().read(true).write(true).open(&path)?;
+    let mut contents: String = String::new();
+    file.read_to_string(&mut contents)?;
+
+    let mut new_contents = String::new();
+    let mut found = false;
+    let name_alias_str = format!("{ALIAS_PREFIX} {name}=");
+    for line in contents.lines() {
+        if line.starts_with(&name_alias_str) {
+            println!("Removing alias: {}", line);
+            found = true;
+            continue;
+        }
+        new_contents.push_str(line);
+        new_contents.push('\n');
+    }
+    file.set_len(0)?;
+    file.write_all(new_contents.as_bytes())?;
+
+    if !found {
+        println!("Alias '{}' not found", name);
+        Err("Alias not found")?;
+    }
 
     Ok(())
 }
