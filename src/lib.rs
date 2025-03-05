@@ -7,28 +7,31 @@ use log::debug;
 
 #[derive(Parser)]
 pub struct Args {
-    /// operation to do on the alias `name`
+    /// operation to do on the alias
     #[clap(subcommand)]
     pub operation: Operation,
 }
 
 #[derive(Subcommand)]
 pub enum Operation {
-    /// Show a specific alias or all aliases
+    /// <name>            Show a specific alias or all aliases
     Show {
         /// The name of the alias to show (optional)
         name: Option<String>,
     },
+    /// <name> <command>  Add a new alias
     Add {
         /// The alias name
         name: String,
         /// The command to be executed
         command: String,
     },
+    /// <name>            Remove an alias
     Remove {
         /// The name of the alias to remove
         name: String,
     },
+    /// <name> <command>  Edit an alias
     Edit {
         /// The name of the alias to edit
         name: String,
@@ -85,9 +88,7 @@ fn add_alias(path: PathBuf, name: String, command: String) -> Result<(), Box<dyn
 
     let new_alias = format!("alias {name}='{command}'");
 
-    let mut file = OpenOptions::new()
-        .append(true)
-        .open(&path)?;
+    let mut file = OpenOptions::new().append(true).open(&path)?;
 
     writeln!(file, "{}", new_alias)?;
 
@@ -97,8 +98,10 @@ fn add_alias(path: PathBuf, name: String, command: String) -> Result<(), Box<dyn
 }
 
 fn remove_alias(path: PathBuf, name: String) -> Result<(), Box<dyn Error>> {
-    // Implement logic to remove an alias
     debug!("Remove alias: {}", name);
+
+    let mut file = OpenOptions::new().read(true).write(true).open(&path)?;
+
     Ok(())
 }
 
