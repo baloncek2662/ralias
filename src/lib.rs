@@ -1,12 +1,10 @@
 use std::error::Error;
-use std::f32::consts::E;
-use std::io::BufReader;
 use std::io::prelude::*;
 
 use std::{fs::OpenOptions, io::Write, path::PathBuf};
 
 use clap::{Parser, Subcommand};
-use log::debug;
+use log::{debug, warn};
 
 const ALIAS_PREFIX: &str = "alias";
 
@@ -90,32 +88,43 @@ fn show_alias(path: PathBuf, name: Option<String>) -> Result<(), Box<dyn Error>>
 
 fn add_alias(path: PathBuf, name: String, command: String) -> Result<(), Box<dyn Error>> {
     debug!("Add alias: {name}, command={command}");
-
     let new_alias = format!("alias {name}='{command}'");
-
     let mut file = OpenOptions::new().append(true).open(&path)?;
-
     writeln!(file, "{}", new_alias)?;
-
-    debug!("New alias added: {new_alias}");
-
+    println!("New alias added: {new_alias}");
     Ok(())
 }
 
 fn remove_alias(path: PathBuf, name: String) -> Result<(), Box<dyn Error>> {
     debug!("Remove alias: {}", name);
+    helper_modify_alias(path, name, None)?;
+    Ok(())
+}
 
+fn edit_alias(path: PathBuf, name: String, command: String) -> Result<(), Box<dyn Error>> {
+    debug!("Edit alias: {} with new command: {}", name, command);
+    helper_modify_alias(path, name, Some(command))?;
+    Ok(())
+}
+
+// Removes alias if command is not provided and updates alias if command is provided
+fn helper_modify_alias(path: PathBuf, name: String, command: Option<String>) -> Result<(), Box<dyn Error>> {
     let mut file = OpenOptions::new().read(true).write(true).open(&path)?;
     let mut contents: String = String::new();
     file.read_to_string(&mut contents)?;
 
     let mut new_contents = String::new();
-    let mut found = false;
+    let mut found = 0;
     let name_alias_str = format!("{ALIAS_PREFIX} {name}=");
     for line in contents.lines() {
         if line.starts_with(&name_alias_str) {
-            println!("Removing alias: {}", line);
-            found = true;
+            if let Some(command) = &command {
+                new_contents.push_str(&format!("{}'{}'\n", name_alias_str, command));
+                println!("Editing alias: {}", line);
+            } else {
+                println!("Removing alias: {}", line);
+            }
+            found += 1;
             continue;
         }
         new_contents.push_str(line);
@@ -124,17 +133,13 @@ fn remove_alias(path: PathBuf, name: String) -> Result<(), Box<dyn Error>> {
     file.set_len(0)?;
     file.write_all(new_contents.as_bytes())?;
 
-    if !found {
+    if found == 0 {
         println!("Alias '{}' not found", name);
         Err("Alias not found")?;
+    } else if found > 1 {
+        warn!("Found more than one alias with name '{}'", name);
     }
 
-    Ok(())
-}
-
-fn edit_alias(path: PathBuf, name: String, command: String) -> Result<(), Box<dyn Error>> {
-    // Implement logic to edit an alias
-    debug!("Edit alias: {} with new command: {}", name, command);
     Ok(())
 }
 
