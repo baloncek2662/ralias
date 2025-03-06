@@ -45,7 +45,7 @@ pub enum Operation {
 
 // Box<dyn Error> means the function will return a type that implements the Error trait,
 // but we don’t have to specify what particular type the return value will be.
-pub fn run(bashrc_path: PathBuf, args: Args) -> Result<(), Box<dyn Error>> {
+pub fn run(bashrc_path: &PathBuf, args: Args) -> Result<(), Box<dyn Error>> {
     match args.operation {
         Operation::Show { name } => {
             show_alias(bashrc_path, name)?;
@@ -63,7 +63,7 @@ pub fn run(bashrc_path: PathBuf, args: Args) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn show_alias(path: PathBuf, name: Option<String>) -> Result<(), Box<dyn Error>> {
+fn show_alias(path: &PathBuf, name: Option<String>) -> Result<(), Box<dyn Error>> {
     let contents = std::fs::read_to_string(path).unwrap();
     let aliases = search(ALIAS_PREFIX, &contents);
     match name {
@@ -86,8 +86,23 @@ fn show_alias(path: PathBuf, name: Option<String>) -> Result<(), Box<dyn Error>>
     Ok(())
 }
 
-fn add_alias(path: PathBuf, name: String, command: String) -> Result<(), Box<dyn Error>> {
+fn add_alias(path: &PathBuf, name: String, command: String) -> Result<(), Box<dyn Error>> {
     debug!("Add alias: {name}, command={command}");
+
+    if command.contains('\'') {
+        println!("Command cannot contain single quotes");
+        Err("Command cannot contain single quotes")?;
+    }
+
+    let mut contents: String = String::new();
+    let mut file = OpenOptions::new().read(true).write(true).open(path)?;
+    file.read_to_string(&mut contents)?;
+    let name_alias_str = format!("{ALIAS_PREFIX} {name}=");
+    if search(&name_alias_str, &contents).len() > 0 {
+        println!("Alias already exists");
+        return Err("Alias already exists")?;
+    }
+
     let new_alias = format!("alias {name}='{command}'");
     let mut file = OpenOptions::new().append(true).open(&path)?;
     writeln!(file, "{}", new_alias)?;
@@ -95,21 +110,21 @@ fn add_alias(path: PathBuf, name: String, command: String) -> Result<(), Box<dyn
     Ok(())
 }
 
-fn remove_alias(path: PathBuf, name: String) -> Result<(), Box<dyn Error>> {
+fn remove_alias(path: &PathBuf, name: String) -> Result<(), Box<dyn Error>> {
     debug!("Remove alias: {}", name);
     helper_modify_alias(path, name, None)?;
     Ok(())
 }
 
-fn edit_alias(path: PathBuf, name: String, command: String) -> Result<(), Box<dyn Error>> {
+fn edit_alias(path: &PathBuf, name: String, command: String) -> Result<(), Box<dyn Error>> {
     debug!("Edit alias: {} with new command: {}", name, command);
     helper_modify_alias(path, name, Some(command))?;
     Ok(())
 }
 
 // Removes alias if command is not provided and updates alias if command is provided
-fn helper_modify_alias(path: PathBuf, name: String, command: Option<String>) -> Result<(), Box<dyn Error>> {
-    let mut file = OpenOptions::new().read(true).write(true).open(&path)?;
+fn helper_modify_alias(path: &PathBuf, name: String, command: Option<String>) -> Result<(), Box<dyn Error>> {
+    let mut file = OpenOptions::new().read(true).write(true).open(path)?;
     let mut contents: String = String::new();
     file.read_to_string(&mut contents)?;
 

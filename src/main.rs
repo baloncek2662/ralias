@@ -21,7 +21,7 @@ fn main() {
     };
     bashrc_path.push(BASHRC_FILENAME);
 
-    if let Err(e) = rashrc::run(bashrc_path, args) {
+    if let Err(e) = rashrc::run(&bashrc_path, args) {
         error!("Application error: {e}");
         process::exit(1);
     }
