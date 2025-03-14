@@ -5,6 +5,7 @@ use std::{fs::OpenOptions, io::Write, path::PathBuf};
 
 use clap::{Parser, Subcommand};
 use log::{debug, warn};
+use regex::Regex;
 
 const ALIAS_PREFIX: &str = "alias";
 
@@ -65,7 +66,8 @@ pub fn run(bashrc_path: &PathBuf, args: Args) -> Result<(), Box<dyn Error>> {
 
 fn show_alias(path: &PathBuf, name: Option<String>) -> Result<(), Box<dyn Error>> {
     let contents = std::fs::read_to_string(path).unwrap();
-    let aliases = search(ALIAS_PREFIX, &contents);
+    // Regex to find all lines starting with 'alias', followed by any characters and an equal sign
+    let aliases = search(&format!(r"^\s*{ALIAS_PREFIX}.*=.*\s*"), &contents);
     match name {
         Some(name) => {
             debug!("Show alias: {name}");
@@ -130,10 +132,13 @@ fn helper_modify_alias(path: &PathBuf, name: String, command: Option<String>) ->
 
     let mut new_contents = String::new();
     let mut found = 0;
-    let name_alias_str = format!("{ALIAS_PREFIX} {name}=");
     for line in contents.lines() {
-        if line.starts_with(&name_alias_str) {
+        // Regex to find if the line starting with 'alias', followed by whitespace and the name of the alias exists
+        let line_match = search(&format!(r"^\s*{ALIAS_PREFIX}\s*{name}=.*\s*"), line);
+        if line_match.len() > 0 {
             if let Some(command) = &command {
+                // Format the command properly
+                let name_alias_str = format!("{ALIAS_PREFIX} {name}=");
                 new_contents.push_str(&format!("{}'{}'\n", name_alias_str, command));
                 println!("Editing alias: {}", line);
             } else {
@@ -145,7 +150,9 @@ fn helper_modify_alias(path: &PathBuf, name: String, command: Option<String>) ->
         new_contents.push_str(line);
         new_contents.push('\n');
     }
-    file.set_len(0)?;
+    println!("{}", new_contents);
+    let mut file = OpenOptions::new().write(true).truncate(true).open(path)?;
+
     file.write_all(new_contents.as_bytes())?;
 
     if found == 0 {
@@ -161,8 +168,9 @@ fn helper_modify_alias(path: &PathBuf, name: String, command: Option<String>) ->
 pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
     let mut result = Vec::new();
 
+    let query = Regex::new(query).unwrap();
     for line in contents.lines() {
-        if line.contains(query) {
+        if query.is_match(line) {
             result.push(line);
         }
     }
@@ -246,7 +254,7 @@ Pick three.";
         let command = "git";
         let expected = "alias g='git'\n";
 
-        add_alias(tmp_path.clone(), name.to_string(), command.to_string()).unwrap();
+        add_alias(&tmp_path.clone(), name.to_string(), command.to_string()).unwrap();
 
         let contents = std::fs::read_to_string(tmp_path).unwrap();
         assert_eq!(expected, contents);
@@ -256,14 +264,23 @@ Pick three.";
         let temp_file = NamedTempFile::new().unwrap();
         let tmp_path = temp_file.path().to_path_buf();
         let contents = "alias g='git'\n";
-        std::fs::write(tmp_path.clone(), contents).unwrap();
+        std::fs::write(&tmp_path, contents).unwrap();
         temp_file
     }
 
     #[test]
     fn test_show_alias() {
         let temp_file = helper_create_temp_bashrc();
-        assert!(show_alias(temp_file.path().to_path_buf(), None).is_ok());
-        assert!(show_alias(temp_file.path().to_path_buf(), Some(String::from("g"))).is_ok());
+        assert!(show_alias(&temp_file.path().to_path_buf(), None).is_ok());
+        assert!(show_alias(&temp_file.path().to_path_buf(), Some(String::from("g"))).is_ok());
+        assert!(show_alias(&temp_file.path().to_path_buf(), Some(String::from("non_existent"))).is_err());
+    }
+
+    #[test]
+    fn test_remove_alias() {
+        let temp_file = helper_create_temp_bashrc();
+        assert!(show_alias(&temp_file.path().to_path_buf(), Some(String::from("g"))).is_ok());
+        assert!(remove_alias(&temp_file.path().to_path_buf(), String::from("g")).is_ok());
+        assert!(show_alias(&temp_file.path().to_path_buf(), Some(String::from("g"))).is_err());
     }
 }
