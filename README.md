@@ -1,3 +1,3 @@
-# rashrc
+# ralias
 
-A command line interface for editing your .bashrc file.
+A command line interface for managing your aliases.

@@ -3,7 +3,7 @@ use std::process;
 use clap::Parser;
 use home::home_dir;
 use log::error;
-use rashrc::Args;
+use ralias::Args;
 
 const BASHRC_FILENAME: &str = ".bashrc.test";
 
@@ -21,7 +21,7 @@ fn main() {
     };
     bashrc_path.push(BASHRC_FILENAME);
 
-    if let Err(e) = rashrc::run(&bashrc_path, args) {
+    if let Err(e) = ralias::run(&bashrc_path, args) {
         error!("Application error: {e}");
         process::exit(1);
     }
