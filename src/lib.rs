@@ -6,6 +6,7 @@ use std::{fs::OpenOptions, io::Write, path::PathBuf};
 use clap::{Parser, Subcommand};
 use log::{debug, warn};
 use regex::Regex;
+use colored::Colorize;
 
 const ALIAS_PREFIX: &str = "alias";
 
@@ -18,9 +19,9 @@ pub struct Args {
 
 #[derive(Subcommand)]
 pub enum Operation {
-    /// <name>            Show a specific alias or all aliases
+    /// <name>            Show all aliases or all aliases which contain <name>
     Show {
-        /// The name of the alias to show (optional)
+        /// The name of the alias to show (optional).
         name: Option<String>,
     },
     /// <name> <command>  Add a new alias
@@ -77,7 +78,8 @@ fn show_alias(path: &PathBuf, name: Option<String>) -> Result<(), Box<dyn Error>
                 let alias_name = alias.split('=').collect::<Vec<&str>>()[0];
 
                 if alias_name.contains(&name) {
-                    println!("{}", alias);
+                    let colored_alias = alias.replace(&name, &name.red().bold().to_string());
+                    println!("{}", colored_alias);
                     found = true;
                 }
             }

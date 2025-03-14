@@ -130,6 +130,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "colored"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fde0e0ec90c9dfb3b4b1a0891a7dcd0e2bffde2f7efed5fe7c9bb00e5bfb915e"
+dependencies = [
+ "windows-sys 0.59.0",
+]
+
+[[package]]
 name = "deranged"
 version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -273,6 +282,7 @@ name = "ralias"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "colored 3.0.0",
  "home",
  "log",
  "regex",
@@ -348,7 +358,7 @@ version = "5.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8c5dfa5e08767553704aa0ffd9d9794d527103c736aba9854773851fd7497eb"
 dependencies = [
- "colored",
+ "colored 2.2.0",
  "log",
  "time",
  "windows-sys 0.48.0",

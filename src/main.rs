@@ -5,7 +5,7 @@ use home::home_dir;
 use log::error;
 use ralias::Args;
 
-const BASHRC_FILENAME: &str = ".bashrc.test";
+const BASHRC_FILENAME: &str = ".bashrc";
 
 fn main() {
     simple_logger::init_with_level(log::Level::Debug).unwrap();
