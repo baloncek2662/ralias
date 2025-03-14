@@ -71,9 +71,17 @@ fn show_alias(path: &PathBuf, name: Option<String>) -> Result<(), Box<dyn Error>
     match name {
         Some(name) => {
             debug!("Show alias: {name}");
-            if let Some(alias) = aliases.iter().find(|a| a.contains(&name)) {
-                println!("{}", alias);
-            } else {
+            let mut found = false;
+            for alias in aliases {
+                // only match left-hand side of the alias - which is the alias name
+                let alias_name = alias.split('=').collect::<Vec<&str>>()[0];
+
+                if alias_name.contains(&name) {
+                    println!("{}", alias);
+                    found = true;
+                }
+            }
+            if !found {
                 println!("Alias not found");
                 Err("Alias not found")?
             }
