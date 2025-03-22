@@ -8,7 +8,11 @@ use ralias::Args;
 const BASHRC_FILENAME: &str = ".bashrc";
 
 fn main() {
+    #[cfg(debug_assertions)]
     simple_logger::init_with_level(log::Level::Debug).unwrap();
+
+    #[cfg(not(debug_assertions))]
+    simple_logger::init_with_level(log::Level::Warn).unwrap();
 
     let args = Args::parse();
 
