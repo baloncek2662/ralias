@@ -11,17 +11,22 @@ use colored::Colorize;
 
 const ALIAS_PREFIX: &str = "alias";
 
-#[derive(Parser)]
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
 pub struct Args {
-    /// operation to do on the alias
+    /// Optional parameter, searches for matches in the name or the actual commands
+    #[arg(short, long)]
+    pub content: bool,
+
+    /// Operation to do on the alias
     #[clap(subcommand)]
     pub operation: Operation,
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Debug)]
 pub enum Operation {
     /// <name>            Show all aliases or all aliases which contain <name>
-    Show {
+    Sh {
         /// The name of the alias to show (optional).
         name: Option<String>,
     },
@@ -32,13 +37,13 @@ pub enum Operation {
         /// The command to be executed
         command: String,
     },
-    /// <name>            Remove an alias
-    Remove {
-        /// The name of the alias to remove
+    /// <name>            Delete an alias
+    Del {
+        /// The name of the alias to delete
         name: String,
     },
-    /// <name> <command>  Edit an alias
-    Edit {
+    /// <name> <command>  Modify an alias
+    Mod {
         /// The name of the alias to edit
         name: String,
         /// The new command to be executed
@@ -46,40 +51,54 @@ pub enum Operation {
     },
 }
 
+struct Func {
+    name: String,
+    definition: String,
+}
+
 // Box<dyn Error> means the function will return a type that implements the Error trait,
 // but we don’t have to specify what particular type the return value will be.
 pub fn run(bashrc_path: &PathBuf, args: Args) -> Result<(), Box<dyn Error>> {
     match args.operation {
-        Operation::Show { name } => {
-            let _ = show_aliases(bashrc_path, &name);
-            let _ = show_funcs(bashrc_path, &name);
+        Operation::Sh { name } => {
+            let _ = show_aliases(bashrc_path, &name, args.content);
+            let _ = show_funcs(bashrc_path, &name, args.content);
         }
         Operation::Add { name, command } => {
             add_alias(bashrc_path, name, command)?;
         }
-        Operation::Remove { name } => {
+        Operation::Del { name } => {
             remove_alias(bashrc_path, name)?;
         }
-        Operation::Edit { name, command } => {
+        Operation::Mod { name, command } => {
             edit_alias(bashrc_path, name, command)?;
         }
     }
     Ok(())
 }
 
-// Highlights in red only the part before the separator that matches the search pattern
-fn highlight_search_pattern(line: &str, search_pattern: &str, separator: char) -> String {
-    let parts: Vec<&str> = line.splitn(2, separator).collect();
-    if parts.len() == 2 {
-        let colored = parts[0].replace(search_pattern, &search_pattern.red().bold().to_string());
-        let rest = parts[1];
-        format!("{}{}{}", colored, separator, rest)
-    } else {
-        line.to_string()
+// Highlights in red the parts which match `search_pattern`. If separator is not None, only the part
+// before the separator is highlighted, else the entire part is considered.
+fn highlight_search_pattern(content: &str, search_pattern: &str, separator: Option<char>) -> String {
+    match separator {
+        Some(separator) => {
+            let parts: Vec<&str> = content.splitn(2, separator).collect();
+            if parts.len() == 2 {
+                let colored = parts[0].replace(search_pattern, &search_pattern.red().bold().to_string());
+                let rest = parts[1];
+                format!("{}{}{}", colored, separator, rest)
+            } else {
+                content.to_string()
+            }
+        },
+        None => {
+            let content = content.replace(search_pattern, &search_pattern.red().bold().to_string());
+            content
+        },
     }
 }
 
-fn show_aliases(path: &PathBuf, name: &Option<String>) -> Result<(), Box<dyn Error>> {
+fn show_aliases(path: &PathBuf, name: &Option<String>, search_content: bool) -> Result<(), Box<dyn Error>> {
     let contents = std::fs::read_to_string(path).unwrap();
     // Regex to find all lines starting with 'alias', followed by any characters and an equal sign
     let aliases = search(&format!(r"^\s*{ALIAS_PREFIX}.*=.*\s*"), &contents);
@@ -88,13 +107,21 @@ fn show_aliases(path: &PathBuf, name: &Option<String>) -> Result<(), Box<dyn Err
             debug!("Show alias containing: {name}");
             let mut found = false;
             for alias in aliases {
-                // only match left-hand side of the alias - which is the alias name
-                let alias_name = alias.split('=').collect::<Vec<&str>>()[0];
+                if search_content {
+                    if alias.contains(name) {
+                        let alias = highlight_search_pattern(alias, name, None);
+                        println!("{}", alias);
+                        found = true;
+                    }
+                } else {
+                    // only match left-hand side of the alias - which is the alias name
+                    let alias_name = alias.split('=').collect::<Vec<&str>>()[0];
 
-                if alias_name.contains(name) {
-                    let alias = highlight_search_pattern(alias, name, '=');
-                    println!("{}", alias);
-                    found = true;
+                    if alias_name.contains(name) {
+                        let alias = highlight_search_pattern(alias, name, Some('='));
+                        println!("{}", alias);
+                        found = true;
+                    }
                 }
             }
             if !found {
@@ -111,8 +138,8 @@ fn show_aliases(path: &PathBuf, name: &Option<String>) -> Result<(), Box<dyn Err
     Ok(())
 }
 
-fn search_bash_functions(contents: &str) -> HashMap<String, String> {
-    let mut result = HashMap::new();
+fn search_bash_functions(contents: &str) -> Vec<Func> {
+    let mut result = Vec::new();
     let mut curr_func_name = String::new();
     let mut curr_func: Vec<String> = Vec::new();
     let mut in_func = false;
@@ -121,14 +148,17 @@ fn search_bash_functions(contents: &str) -> HashMap<String, String> {
         if query.is_match(line) {
             // Found a function, what follows is the function body until the closing brace
             in_func = true;
-            // Get just the function name which will be used as the key in the result hashmap
+            // Get just the function name which will be used as the name field in the Func struct
             curr_func_name = line.split('(').collect::<Vec<&str>>()[0].trim().to_string();
             curr_func.push(line.to_string());
         } else if in_func {
             curr_func.push(line.to_string());
-            if line.contains("}") {
+            if line.contains("}") && !line.contains("{") {
                 in_func = false;
-                result.insert(curr_func_name.clone(), curr_func.join("\n"));
+                result.push(Func {
+                    name: curr_func_name.clone(),
+                    definition: curr_func.join("\n"),
+                });
                 curr_func.clear();
             }
         }
@@ -136,23 +166,30 @@ fn search_bash_functions(contents: &str) -> HashMap<String, String> {
     result
 }
 
-fn show_funcs(path: &PathBuf, name: &Option<String>) -> Result<(), Box<dyn Error>> {
+fn show_funcs(path: &PathBuf, name: &Option<String>, search_content: bool) -> Result<(), Box<dyn Error>> {
     let contents = std::fs::read_to_string(path).unwrap();
     let funcs = search_bash_functions(contents.as_str());
     match name {
         Some(name) => {
             debug!("Show function containing: {name}");
-            for (func_name, func) in funcs {
-                if func_name.contains(name) {
-                    let func = highlight_search_pattern(&func, name, '{');
-                    println!("{}", func);
+            for func in funcs {
+                if search_content {
+                    if func.definition.contains(name) {
+                        let func_content = highlight_search_pattern(&func.definition, name, None);
+                        println!("{}", func_content);
+                    }
+                } else {
+                    if func.name.contains(name) {
+                        let func_content = highlight_search_pattern(&func.definition, name, Some('{'));
+                        println!("{}", func_content);
+                    }
                 }
             }
         }
         None => {
             debug!("Show all functions");
-            for (_, func_body) in funcs {
-                println!("{}", func_body);
+            for func in funcs {
+                println!("{}", func.definition);
             }
         }
     }
@@ -342,16 +379,16 @@ Pick three.";
     #[test]
     fn test_show_alias() {
         let temp_file = helper_create_temp_bashrc();
-        assert!(show_aliases(&temp_file.path().to_path_buf(), &None).is_ok());
-        assert!(show_aliases(&temp_file.path().to_path_buf(), &Some(String::from("g"))).is_ok());
-        assert!(show_aliases(&temp_file.path().to_path_buf(), &Some(String::from("non_existent"))).is_err());
+        assert!(show_aliases(&temp_file.path().to_path_buf(), &None, false).is_ok());
+        assert!(show_aliases(&temp_file.path().to_path_buf(), &Some(String::from("g")), false).is_ok());
+        assert!(show_aliases(&temp_file.path().to_path_buf(), &Some(String::from("non_existent")), false).is_err());
     }
 
     #[test]
     fn test_remove_alias() {
         let temp_file = helper_create_temp_bashrc();
-        assert!(show_aliases(&temp_file.path().to_path_buf(), &Some(String::from("g"))).is_ok());
+        assert!(show_aliases(&temp_file.path().to_path_buf(), &Some(String::from("g")), false).is_ok());
         assert!(remove_alias(&temp_file.path().to_path_buf(), String::from("g")).is_ok());
-        assert!(show_aliases(&temp_file.path().to_path_buf(), &Some(String::from("g"))).is_err());
+        assert!(show_aliases(&temp_file.path().to_path_buf(), &Some(String::from("g")), false).is_err());
     }
 }
