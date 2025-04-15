@@ -6,6 +6,7 @@ use log::error;
 use ralias::Args;
 
 const BASHRC_FILENAME: &str = ".bashrc";
+const GITALIAS_FILENAME: &str = ".gitconfig";
 
 fn main() {
     #[cfg(debug_assertions)]
@@ -16,16 +17,22 @@ fn main() {
 
     let args = Args::parse();
 
-    let mut bashrc_path = match home_dir() {
+    let mut file_path = match home_dir() {
         Some(path) => path,
         _ => {
             error!("Unable to get your home dir!");
             return;
         }
     };
-    bashrc_path.push(BASHRC_FILENAME);
 
-    if let Err(e) = ralias::run(&bashrc_path, args) {
+    let file_name = if args.git {
+        GITALIAS_FILENAME
+    } else {
+        BASHRC_FILENAME
+    };
+    file_path.push(file_name);
+
+    if let Err(e) = ralias::run(&file_path, args) {
         error!("Application error: {e}");
         process::exit(1);
     }

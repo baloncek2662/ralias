@@ -2,7 +2,6 @@ use std::error::Error;
 use std::io::prelude::*;
 
 use std::{fs::OpenOptions, io::Write, path::PathBuf};
-use std::collections::HashMap;
 
 use clap::{Parser, Subcommand};
 use log::{debug, warn};
@@ -10,6 +9,7 @@ use regex::Regex;
 use colored::Colorize;
 
 const ALIAS_PREFIX: &str = "alias";
+const GIT_ALIAS_PREFIX: &str = "[alias]";
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -17,6 +17,10 @@ pub struct Args {
     /// Optional parameter, searches for matches in the name or the actual commands
     #[arg(short, long)]
     pub content: bool,
+
+    /// Optional parameter, searches in git alias file instead of bashrc
+    #[arg(short, long)]
+    pub git: bool,
 
     /// Operation to do on the alias
     #[clap(subcommand)]
@@ -61,8 +65,11 @@ struct Func {
 pub fn run(bashrc_path: &PathBuf, args: Args) -> Result<(), Box<dyn Error>> {
     match args.operation {
         Operation::Sh { name } => {
-            let _ = show_aliases(bashrc_path, &name, args.content);
-            let _ = show_funcs(bashrc_path, &name, args.content);
+            show_aliases(bashrc_path, &name, args.content, args.git)?;
+            // git does not have functions
+            if !args.git {
+                show_funcs(bashrc_path, &name, args.content)?;
+            }
         }
         Operation::Add { name, command } => {
             add_alias(bashrc_path, name, command)?;
@@ -98,10 +105,36 @@ fn highlight_search_pattern(content: &str, search_pattern: &str, separator: Opti
     }
 }
 
-fn show_aliases(path: &PathBuf, name: &Option<String>, search_content: bool) -> Result<(), Box<dyn Error>> {
-    let contents = std::fs::read_to_string(path).unwrap();
-    // Regex to find all lines starting with 'alias', followed by any characters and an equal sign
-    let aliases = search(&format!(r"^\s*{ALIAS_PREFIX}.*=.*\s*"), &contents);
+fn get_aliases(path: &PathBuf, git: bool) -> Vec<String> {
+    if !git {
+        let contents = std::fs::read_to_string(path).unwrap();
+        // Regex to find all lines starting with 'alias', followed by any characters and an equal sign
+        let aliases = search(&format!(r"^\s*{ALIAS_PREFIX}.*=.*\s*"), &contents);
+        aliases.into_iter().map(|s| s.to_string()).collect()
+    } else {
+        let contents = std::fs::read_to_string(path).unwrap();
+        // Parse line-by line until you find the [alias] section
+        let mut aliases = Vec::new();
+        let mut in_alias_section = false;
+        for line in contents.lines() {
+            if line.starts_with(GIT_ALIAS_PREFIX) {
+                in_alias_section = true;
+                continue;
+            }
+            else if line.starts_with("[") {
+                in_alias_section = false; // End of the alias section
+                continue;
+            }
+            if in_alias_section {
+                aliases.push(line.to_string());
+            }
+        }
+        aliases
+    }
+}
+
+fn show_aliases(path: &PathBuf, name: &Option<String>, search_content: bool, git: bool) -> Result<(), Box<dyn Error>> {
+    let aliases = get_aliases(path, git);
     match name {
         Some(name) => {
             debug!("Show alias containing: {name}");
@@ -109,7 +142,7 @@ fn show_aliases(path: &PathBuf, name: &Option<String>, search_content: bool) -> 
             for alias in aliases {
                 if search_content {
                     if alias.contains(name) {
-                        let alias = highlight_search_pattern(alias, name, None);
+                        let alias = highlight_search_pattern(&alias, name, None);
                         println!("{}", alias);
                         found = true;
                     }
@@ -118,7 +151,7 @@ fn show_aliases(path: &PathBuf, name: &Option<String>, search_content: bool) -> 
                     let alias_name = alias.split('=').collect::<Vec<&str>>()[0];
 
                     if alias_name.contains(name) {
-                        let alias = highlight_search_pattern(alias, name, Some('='));
+                        let alias = highlight_search_pattern(&alias, name, Some('='));
                         println!("{}", alias);
                         found = true;
                     }
@@ -379,16 +412,16 @@ Pick three.";
     #[test]
     fn test_show_alias() {
         let temp_file = helper_create_temp_bashrc();
-        assert!(show_aliases(&temp_file.path().to_path_buf(), &None, false).is_ok());
-        assert!(show_aliases(&temp_file.path().to_path_buf(), &Some(String::from("g")), false).is_ok());
-        assert!(show_aliases(&temp_file.path().to_path_buf(), &Some(String::from("non_existent")), false).is_err());
+        assert!(show_aliases(&temp_file.path().to_path_buf(), &None, false, false).is_ok());
+        assert!(show_aliases(&temp_file.path().to_path_buf(), &Some(String::from("g")), false, false).is_ok());
+        assert!(show_aliases(&temp_file.path().to_path_buf(), &Some(String::from("non_existent")), false, false).is_err());
     }
 
     #[test]
     fn test_remove_alias() {
         let temp_file = helper_create_temp_bashrc();
-        assert!(show_aliases(&temp_file.path().to_path_buf(), &Some(String::from("g")), false).is_ok());
+        assert!(show_aliases(&temp_file.path().to_path_buf(), &Some(String::from("g")), false, false).is_ok());
         assert!(remove_alias(&temp_file.path().to_path_buf(), String::from("g")).is_ok());
-        assert!(show_aliases(&temp_file.path().to_path_buf(), &Some(String::from("g")), false).is_err());
+        assert!(show_aliases(&temp_file.path().to_path_buf(), &Some(String::from("g")), false, false).is_err());
     }
 }
