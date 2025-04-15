@@ -126,7 +126,10 @@ fn get_aliases(path: &PathBuf, git: bool) -> Vec<String> {
                 continue;
             }
             if in_alias_section {
-                aliases.push(line.to_string());
+                // Add alias if line not empty and contains a =
+                if !line.is_empty() && line.contains('=') {
+                    aliases.push(line.to_string());
+                }
             }
         }
         aliases
